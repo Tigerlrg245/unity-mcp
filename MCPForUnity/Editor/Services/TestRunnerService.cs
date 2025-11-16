@@ -24,6 +24,7 @@ namespace MCPForUnity.Editor.Services
         private readonly SemaphoreSlim _operationLock = new SemaphoreSlim(1, 1);
         private readonly List<ITestResultAdaptor> _leafResults = new List<ITestResultAdaptor>();
         private TaskCompletionSource<TestRunResult> _runCompletionSource;
+        private bool _expectPlayModeRun;
 
         public TestRunnerService()
         {
@@ -71,8 +72,8 @@ namespace MCPForUnity.Editor.Services
 
                 _leafResults.Clear();
                 _runCompletionSource = new TaskCompletionSource<TestRunResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-
                 var filter = new Filter { testMode = mode };
+                _expectPlayModeRun = mode == TestMode.PlayMode;
                 EnsureEditorReadyForRun();
                 _testRunnerApi.Execute(new ExecutionSettings(filter));
 
@@ -132,29 +133,20 @@ namespace MCPForUnity.Editor.Services
             var payload = TestRunResult.Create(result, _leafResults);
             _runCompletionSource.TrySetResult(payload);
             _runCompletionSource = null;
+            _expectPlayModeRun = false;
         }
 
-        private static void EnsureEditorReadyForRun()
+        private void EnsureEditorReadyForRun()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                EditorApplication.ExitPlaymode();
-                WaitForPlayState(false);
-            }
-
-            for (int i = 0; i < SceneManager.sceneCount; i++)
-            {
-                var scene = SceneManager.GetSceneAt(i);
-                if (scene.isLoaded && scene.isDirty)
-                {
-                    EditorSceneManager.SaveScene(scene);
-                }
+                throw new InvalidOperationException("Cannot run Unity tests while the editor is in Play Mode. Please stop Play Mode and retry.");
             }
         }
 
-        private static void EnsureEditorResetAfterRun()
+        private void EnsureEditorResetAfterRun()
         {
-            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            if (_expectPlayModeRun && EditorApplication.isPlayingOrWillChangePlaymode)
             {
                 EditorApplication.ExitPlaymode();
                 WaitForPlayState(false);
