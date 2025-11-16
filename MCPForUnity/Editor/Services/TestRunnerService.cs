@@ -74,8 +74,10 @@ namespace MCPForUnity.Editor.Services
                 _runCompletionSource = new TaskCompletionSource<TestRunResult>(TaskCreationOptions.RunContinuationsAsynchronously);
                 var filter = new Filter { testMode = mode };
                 _expectPlayModeRun = mode == TestMode.PlayMode;
-                EnsureEditorReadyForRun();
-                _testRunnerApi.Execute(new ExecutionSettings(filter));
+
+                // Ensure we interact with Unity APIs from the main thread.
+                await RunOnMainThreadAsync(() => EnsureEditorReadyForRun()).ConfigureAwait(true);
+                await RunOnMainThreadAsync(() => _testRunnerApi.Execute(new ExecutionSettings(filter))).ConfigureAwait(true);
 
                 runTask = _runCompletionSource.Task;
             }
@@ -134,6 +136,36 @@ namespace MCPForUnity.Editor.Services
             _runCompletionSource.TrySetResult(payload);
             _runCompletionSource = null;
             _expectPlayModeRun = false;
+        }
+
+        private async Task RunOnMainThreadAsync(Action action)
+        {
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            void Handler()
+            {
+                EditorApplication.update -= Handler;
+                try
+                {
+                    action?.Invoke();
+                    tcs.SetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            }
+
+            if (EditorApplication.isUpdating)
+            {
+                Handler();
+            }
+            else
+            {
+                EditorApplication.update += Handler;
+            }
+
+            await tcs.Task.ConfigureAwait(true);
         }
 
         private void EnsureEditorReadyForRun()
