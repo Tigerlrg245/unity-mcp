@@ -5,8 +5,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using MCPForUnity.Editor.Helpers;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace MCPForUnity.Editor.Services
 {
@@ -71,6 +73,7 @@ namespace MCPForUnity.Editor.Services
                 _runCompletionSource = new TaskCompletionSource<TestRunResult>(TaskCreationOptions.RunContinuationsAsynchronously);
 
                 var filter = new Filter { testMode = mode };
+                EnsureEditorReadyForRun();
                 _testRunnerApi.Execute(new ExecutionSettings(filter));
 
                 runTask = _runCompletionSource.Task;
@@ -119,6 +122,8 @@ namespace MCPForUnity.Editor.Services
 
         public void RunFinished(ITestResultAdaptor result)
         {
+            EnsureEditorResetAfterRun();
+
             if (_runCompletionSource == null)
             {
                 return;
@@ -127,6 +132,43 @@ namespace MCPForUnity.Editor.Services
             var payload = TestRunResult.Create(result, _leafResults);
             _runCompletionSource.TrySetResult(payload);
             _runCompletionSource = null;
+        }
+
+        private static void EnsureEditorReadyForRun()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                EditorApplication.ExitPlaymode();
+                WaitForPlayState(false);
+            }
+
+            for (int i = 0; i < SceneManager.sceneCount; i++)
+            {
+                var scene = SceneManager.GetSceneAt(i);
+                if (scene.isLoaded && scene.isDirty)
+                {
+                    EditorSceneManager.SaveScene(scene);
+                }
+            }
+        }
+
+        private static void EnsureEditorResetAfterRun()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                EditorApplication.ExitPlaymode();
+                WaitForPlayState(false);
+            }
+        }
+
+        private static void WaitForPlayState(bool targetState, double timeoutSeconds = 5.0)
+        {
+            var start = EditorApplication.timeSinceStartup;
+            while (EditorApplication.isPlayingOrWillChangePlaymode != targetState &&
+                   EditorApplication.timeSinceStartup - start < timeoutSeconds)
+            {
+                Thread.Sleep(50);
+            }
         }
 
         public void TestStarted(ITestAdaptor test)
