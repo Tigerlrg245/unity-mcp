@@ -87,13 +87,13 @@ namespace MCPForUnity.Editor.Resources.Tests
                 return false;
             }
 
-            if (modeStr.Equals("EditMode", StringComparison.OrdinalIgnoreCase))
+            if (modeStr.Equals("EditMode", StringComparison.OrdinalIgnoreCase) || modeStr.Equals("edit", StringComparison.OrdinalIgnoreCase))
             {
                 mode = TestMode.EditMode;
                 return true;
             }
 
-            if (modeStr.Equals("PlayMode", StringComparison.OrdinalIgnoreCase))
+            if (modeStr.Equals("PlayMode", StringComparison.OrdinalIgnoreCase) || modeStr.Equals("play", StringComparison.OrdinalIgnoreCase))
             {
                 mode = TestMode.PlayMode;
                 return true;
